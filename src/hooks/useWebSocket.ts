@@ -5,7 +5,9 @@ export const useAudioWebSocket = () => {
   const [isConnected, setIsConnected] = useState(false);
   const socketRef = useRef<WebSocket | null>(null);
 
-  useEffect(() => {
+  const connect = useCallback(() => {
+    if (socketRef.current) return;
+
     const socket = new WebSocket("ws://localhost:8000/ws/audio-stream");
     socket.binaryType = "arraybuffer";
     socketRef.current = socket;
@@ -23,17 +25,13 @@ export const useAudioWebSocket = () => {
         } catch (e) {
           console.error("Failed to parse JSON message:", event.data, e);
         }
-      } else if (
-        event.data instanceof Blob ||
-        event.data instanceof ArrayBuffer
-      ) {
+      } else {
+        // audio Blob or ArrayBuffer
         console.log("Received audio data");
         const audioBlob = new Blob([event.data], { type: "audio/wav" });
         const audioUrl = URL.createObjectURL(audioBlob);
         const audio = new Audio(audioUrl);
         audio.play().catch((e) => console.error("Error playing audio:", e));
-      } else {
-        console.log("Received unknown message type:", event.data);
       }
     };
 
@@ -48,17 +46,21 @@ export const useAudioWebSocket = () => {
       setIsConnected(false);
       socketRef.current = null;
     };
+  }, []);
 
+  useEffect(() => {
     return () => {
-      console.log("Closing WebSocket connection");
-      socket.close();
-      socketRef.current = null;
+      if (socketRef.current) {
+        console.log("Cleaning up WebSocket connection");
+        socketRef.current.close();
+        socketRef.current = null;
+      }
       setIsConnected(false);
     };
   }, []);
 
   const sendAudio = useCallback((audioBuffer: ArrayBuffer) => {
-    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+    if (socketRef.current?.readyState === WebSocket.OPEN) {
       console.log("Sending audio data...");
       socketRef.current.send(audioBuffer);
     } else {
@@ -66,5 +68,5 @@ export const useAudioWebSocket = () => {
     }
   }, []);
 
-  return { sendAudio, isConnected };
+  return { connect, sendAudio, isConnected };
 };
